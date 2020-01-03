@@ -10,8 +10,8 @@ Gem::Specification.new do |spec|
   spec.author        = 'icyleaf'
   spec.email         = 'icyleaf.cn@gmail.com'
 
-  spec.summary       = 'debug_file'
-  # spec.homepage      = "https://github.com/<GITHUB_USERNAME>/fastlane-plugin-debug_file"
+  spec.summary       = 'Compress iOS/macApp dSYM or Android Proguard(mapping/R/AndroidManifest) to zip file'
+  spec.homepage      = "https://github.com/icyleaf/fastlane-plugin-debug_file"
   spec.license       = "MIT"
 
   spec.files         = Dir["lib/**/*"] + %w(README.md LICENSE)

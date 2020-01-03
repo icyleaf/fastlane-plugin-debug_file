@@ -12,15 +12,24 @@ fastlane add_plugin debug_file
 
 ## About debug_file
 
-debug_file
+debug_file plugin includes two actions:
 
-**Note to author:** Add a more detailed description about this plugin here. If your plugin contains multiple actions, make sure to mention them here.
+- `dsym`: Find iOS/macOS app dSYM and compress automatically
+- `proguard`: Find Android proguard and compress automatically
+
+### dsym
+
+Why another `dsym` action? fastlane was built-in simlar action named [dsym_zip](https://docs.fastlane.tools/actions/dsym_zip/) which it only accepts spetical path, our `dsym` it counld find dSYM
+file automatically, even accpets multiple dSYM to compress.
+
+### proguard
+
+If Android app set `minifyEnabled = true`, it called proguard, `proguard` could find `mapping.txt`,
+`R.txt` and `AndroidManifest.xml` automatically.
 
 ## Example
 
 Check out the [example `Fastfile`](fastlane/Fastfile) to see how to use this plugin. Try it by cloning the repo, running `fastlane install_plugins` and `bundle exec fastlane test`.
-
-**Note to author:** Please set up a sample project to make it easy for users to explore what your plugin does. Provide everything that is necessary to try out the plugin in this project (including a sample Xcode/Android project if necessary)
 
 ## Run tests for this plugin
 
