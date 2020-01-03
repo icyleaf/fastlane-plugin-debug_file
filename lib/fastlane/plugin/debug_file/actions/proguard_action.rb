@@ -38,7 +38,7 @@ module Fastlane
         output_path = params[:output_path]
         output_file = File.join(output_path, zip_filename(build_type, flavor))
 
-        determine_output_file(output_file, overwrite)
+        Helper::DebugFileHelper.determine_output_file(output_file, overwrite)
 
         src_files = find_proguard_files(app_path, build_type, flavor, extra_files)
         UI.user_error! 'No found any proguard file' if src_files.empty?
@@ -47,8 +47,7 @@ module Fastlane
         Helper::DebugFileHelper.compress(src_files, output_file)
 
         UI.success "Compressed proguard files: #{output_file}"
-        Actions.lane_context[SharedValues::DF_PROGUARD_ZIP_PATH] = output_file
-        ENV[SharedValues::DF_PROGUARD_ZIP_PATH.to_s] = output_file
+        Helper::DebugFileHelper.store_shard_value SharedValues::DF_PROGUARD_ZIP_PATH, output_file
       end
 
       def self.find_proguard_files(app_path, build_type, flavor, extra_files)
@@ -58,10 +57,7 @@ module Fastlane
           UI.verbose("File path `#{path}` exist: #{existed}")
           next unless existed
 
-          src_files << {
-            name: file[:name],
-            path: path
-          }
+          src_files << path
         end
 
         extra_files.each do |file|
@@ -69,10 +65,7 @@ module Fastlane
           UI.verbose("File path `#{file}` exist: #{existed}")
           next unless existed
 
-          src_files << {
-            name: File.basename(file),
-            path: file
-          }
+          src_files << file
         end
 
         src_files.uniq
@@ -90,17 +83,6 @@ module Fastlane
         "#{flavor}#{build_type}-proguard.zip"
       end
       private_class_method :zip_filename
-
-      def self.determine_output_file(output_file, overwrite)
-        if File.exist?(output_file)
-          if overwrite
-            File.rm output_file
-          else
-            UI.user_error! "Compressed proguard file was existed: #{output_file}"
-          end
-        end
-      end
-      private_class_method :determine_output_file
 
       #####################################################
       # @!group Documentation
@@ -153,7 +135,7 @@ module Fastlane
           'proguard(
             build_type: "release",
             flavor: "full"
-          )'
+          )',
           'proguard(
             extra_files: [
               "app/src/main/AndroidManifest.xml"

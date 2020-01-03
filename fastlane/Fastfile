@@ -2,7 +2,17 @@ lane :android_debug_file do
   proguard(
     flavor: 'full',
     extra_files: [
-      'fastlane/react_native.gradle'
+      'app/src/main/AndroidManifest.xml'
+    ]
+  )
+end
+
+lane :ios_debug_file do
+  dsym(
+    scheme: 'App',
+    extra_dsym: [
+      'HHZcutphoto.framework.dSYM',
+      'HHZcutvideo.framework.dSYM',
     ]
   )
 end
