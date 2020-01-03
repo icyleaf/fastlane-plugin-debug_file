@@ -2,77 +2,59 @@
 
 require 'fastlane/action'
 require_relative '../helper/debug_file_helper'
-require 'zip'
 
 module Fastlane
   module Actions
     module SharedValues
-      PROGUARDS = :PROGUARDS
+      DF_PROGUARD_ZIP_PATH = :DF_PROGUARD_ZIP_PATH
     end
 
-    MATCHES_FILES = {
-      manifest: {
-        name: 'AndroidManifest.xml',
-        path: 'build/intermediates/manifests/full'
-      },
-      mapping: {
-        name: 'mapping.txt',
-        path: 'build/outputs/mapping'
-      },
-      symbol: {
-        name: 'R.txt',
-        path: 'build/intermediates/symbols'
-      }
-    }
-
-    RELEASE_TYPE = 'release'
-    APP_PATH = 'app'
-    OUTPUT_PATH = File.join('build', 'outputs', 'debug_files')
-
     class ProguardAction < Action
+      MATCHES_FILES = {
+        mapping: {
+          name: 'mapping.txt',
+          path: 'build/outputs/mapping'
+        },
+        manifest: {
+          name: 'AndroidManifest.xml',
+          path: 'build/intermediates/manifests/full'
+        },
+        symbol: {
+          name: 'R.txt',
+          path: 'build/intermediates/symbols'
+        }
+      }
+
+      APP_PATH = 'app'
+      RELEASE_TYPE = 'release'
+      OUTPUT_PATH = '.'
+
       def self.run(params)
-        app_path = File.expand_path(params[:app_path])
-        puts app_path
+        app_path = params[:app_path]
         build_type = params[:build_type]
+        flavor = params[:flavor]
+        overwrite = params[:overwrite]
+        extra_files = params[:extra_files]
+        output_path = params[:output_path]
+        output_file = File.join(output_path, zip_filename(build_type, flavor))
 
-        src_files = find_proguard_files(app_path, build_type)
-        UI.user_error! 'No found proguard file' if src_files.empty?
+        determine_output_file(output_file, overwrite)
 
-        print_table(src_files)
+        src_files = find_proguard_files(app_path, build_type, flavor, extra_files)
+        UI.user_error! 'No found any proguard file' if src_files.empty?
 
-        desc_path = File.join(app_path, OUTPUT_PATH)
-        Dir.mkdir desc_path unless Dir.exist?(desc_path)
+        UI.success "Found #{src_files.size} debug information files"
+        Helper::DebugFileHelper.compress(src_files, output_file)
 
-        desc_file = File.join(desc_path, zip_filename(build_type))
-        ::Zip::File.open(desc_file, ::Zip::File::CREATE) do |zipfile|
-          src_files.each do |file|
-            zipfile.add(file[:name], file[:path])
-          end
-        end
-
-        UI.success "Generate android debug file to #{desc_file}"
-
-        Actions.lane_context[SharedValues::DSYM_ZIP_PATH] = desc_file
-        ENV[SharedValues::DSYM_ZIP_PATH.to_s] = desc_file
+        UI.success "Compressed proguard files: #{output_file}"
+        Actions.lane_context[SharedValues::DF_PROGUARD_ZIP_PATH] = output_file
+        ENV[SharedValues::DF_PROGUARD_ZIP_PATH.to_s] = output_file
       end
 
-      def self.print_table(files)
-        rows = files.each_with_object({}) do |file, obj|
-          obj[file[:name]] = file[:path]
-        end
-
-        return if rows.empty?
-
-        puts Terminal::Table.new(
-          title: "Summary for proguard #{Fastlane::DebugFile::VERSION}".green,
-          rows: rows
-        )
-      end
-
-      def self.find_proguard_files(app_path, build_type)
+      def self.find_proguard_files(app_path, build_type, flavor, extra_files)
         src_files = []
         MATCHES_FILES.each do |_, file|
-          path, existed = find_file(app_path, file, build_type)
+          path, existed = find_file(app_path, file, build_type, flavor)
           UI.verbose("File path `#{path}` exist: #{existed}")
           next unless existed
 
@@ -82,19 +64,43 @@ module Fastlane
           }
         end
 
-        src_files
+        extra_files.each do |file|
+          existed = File.exist?(file)
+          UI.verbose("File path `#{file}` exist: #{existed}")
+          next unless existed
+
+          src_files << {
+            name: File.basename(file),
+            path: file
+          }
+        end
+
+        src_files.uniq
       end
 
-      def self.find_file(app_path, file, build_type)
-        path = File.join(app_path, file[:path], build_type, file[:name])
+      def self.find_file(app_path, file, build_type, flavor)
+        flavor ||= ''
+        path = File.join(app_path, file[:path], flavor, build_type, file[:name])
         [path, File.exist?(path)]
       end
       private_class_method :find_file
 
-      def self.zip_filename(build_type)
-        "#{build_type}-#{Time.now.strftime('%Y%m%d%H%M')}.zip"
+      def self.zip_filename(build_type, flavor = nil)
+        flavor = flavor.to_s.empty? ? '' : "#{flavor}-"
+        "#{flavor}#{build_type}-proguard.zip"
       end
       private_class_method :zip_filename
+
+      def self.determine_output_file(output_file, overwrite)
+        if File.exist?(output_file)
+          if overwrite
+            File.rm output_file
+          else
+            UI.user_error! "Compressed proguard file was existed: #{output_file}"
+          end
+        end
+      end
+      private_class_method :determine_output_file
 
       #####################################################
       # @!group Documentation
@@ -106,32 +112,52 @@ module Fastlane
 
       def self.available_options
         [
-          FastlaneCore::ConfigItem.new(key: :build_type,
-                                       env_name: 'PROGUARD_BUILD_TYPE',
-                                       description: 'The build type of app',
-                                       default_value: RELEASE_TYPE,
-                                       type: String),
           FastlaneCore::ConfigItem.new(key: :app_path,
-                                       env_name: 'PROGUARD_PATH',
+                                       env_name: 'DF_PROGUARD_PATH',
                                        description: 'The path of app project',
                                        default_value: APP_PATH,
                                        type: String),
-          FastlaneCore::ConfigItem.new(key: :output_path,
-                                       env_name: 'PROGUARD_OUTPUT_PATH',
-                                       description: "The output path of zipped proguard file",
-                                       default_value: File.join(APP_PATH, OUTPUT_PATH),
+          FastlaneCore::ConfigItem.new(key: :build_type,
+                                       env_name: 'DF_PROGUARD_BUILD_TYPE',
+                                       description: 'The build type of app',
+                                       default_value: RELEASE_TYPE,
+                                       type: String),
+          FastlaneCore::ConfigItem.new(key: :flavor,
+                                       env_name: 'DF_PROGUARD_FLAVOR',
+                                       description: 'The product flavor of app',
                                        optional: true,
-                                       type: String)
+                                       type: String),
+          FastlaneCore::ConfigItem.new(key: :extra_files,
+                                       env_name: 'DF_PROGUARD_EXTRA_FILES',
+                                       description: 'The extra files of app project',
+                                       optional: true,
+                                       default_value: [],
+                                       type: Array),
+          FastlaneCore::ConfigItem.new(key: :output_path,
+                                       env_name: 'DF_PROGUARD_OUTPUT_PATH',
+                                       description: "The output path of compressed proguard file",
+                                       default_value: OUTPUT_PATH,
+                                       optional: true,
+                                       type: String),
+          FastlaneCore::ConfigItem.new(key: :overwrite,
+                                       env_name: 'DF_PROGUARD_OVERWRITE',
+                                       description: "Overwrite output compressed file if it existed",
+                                       default_value: false,
+                                       type: Boolean)
         ]
       end
 
       def self.example_code
         [
-          'android_(
-            endpoint: "...",
-            token: "...",
-            plat_id: 123,
-            file: "./app.{ipa,apk}"
+          'proguard',
+          'proguard(
+            build_type: "release",
+            flavor: "full"
+          )'
+          'proguard(
+            extra_files: [
+              "app/src/main/AndroidManifest.xml"
+            ]
           )'
         ]
       end
@@ -140,9 +166,13 @@ module Fastlane
         :misc
       end
 
+      def self.return_value
+        String
+      end
+
       def self.output
         [
-          ['PROGUARDS', 'URL of the newly uploaded build']
+          ['DF_PROGUARD_ZIP_PATH', 'the path of compressed proguard file']
         ]
       end
 

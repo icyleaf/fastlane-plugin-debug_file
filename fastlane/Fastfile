@@ -1,3 +1,8 @@
-lane :test do
-  debug_file
+lane :android_debug_file do
+  proguard(
+    flavor: 'full',
+    extra_files: [
+      'fastlane/react_native.gradle'
+    ]
+  )
 end

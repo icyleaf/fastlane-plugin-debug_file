@@ -3,6 +3,10 @@ require_relative '../helper/debug_file_helper'
 
 module Fastlane
   module Actions
+    module SharedValues
+      DF_DSYM_ZIP_PATH = :DF_DSYM_ZIP_PATH
+    end
+
     class AndroidDebugFileAction < Action
       def self.run(params)
         UI.message("The debug_file plugin is working!")

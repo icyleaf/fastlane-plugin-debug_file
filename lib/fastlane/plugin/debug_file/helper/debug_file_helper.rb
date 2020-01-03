@@ -5,11 +5,15 @@ module Fastlane
 
   module Helper
     class DebugFileHelper
-      # class methods that you define here become available in your action
-      # as `Helper::DebugFileHelper.your_method`
-      #
-      def self.show_message
-        UI.message("Hello from the debug_file plugin helper!")
+      def self.compress(src_files, desc_file)
+        require 'zip'
+
+        FileUtils.mkdir_p output_path unless Dir.exist?(File.basename(desc_file))
+        ::Zip::File.open(desc_file, ::Zip::File::CREATE) do |zipfile|
+          src_files.each do |file|
+            zipfile.add file[:name], file[:path]
+          end
+        end
       end
     end
   end
