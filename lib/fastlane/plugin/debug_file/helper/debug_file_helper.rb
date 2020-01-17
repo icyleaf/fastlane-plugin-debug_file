@@ -12,7 +12,15 @@ module Fastlane
         FileUtils.mkdir_p output_path unless Dir.exist?(output_path)
         ::Zip::File.open(desc_file, ::Zip::File::CREATE) do |zipfile|
           src_files.each do |file|
-            zipfile.add File.basename(file), file
+            if File.file?(file)
+              zipfile.add File.basename(file), file
+            else
+              root_path = "#{File.dirname(file)}/"
+              Dir[File.join(file, '**', '*')].each do |path|
+                zip_path = path.sub(root_path, '')
+                zipfile.add(zip_path, path)
+              end
+            end
           end
         end
       end
