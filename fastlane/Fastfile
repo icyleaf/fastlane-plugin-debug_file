@@ -8,5 +8,8 @@ lane :android_debug_file do
 end
 
 lane :ios_debug_file do
-  dsym(scheme: 'AppName')
+  dsym(
+    scheme: 'AppName',
+    overwrite: true
+  )
 end

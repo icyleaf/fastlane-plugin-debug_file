@@ -30,7 +30,10 @@ module Fastlane
           UI.user_error! "Not matched any archive with scheme: #{scheme}"
         end
 
-        UI.success "Selected dSYM archive path: #{File.basename(File.dirname(archive_dsym_path))}"
+        xarchive_file = File.basename(File.dirname(archive_dsym_path))
+        xarchive_info_file = File.join(File.expand_path('../', archive_dsym_path), 'Info.plist')
+        release_version, build_version, created_at = version_info(xarchive_info_file)
+        UI.success "Selected dSYM archive: #{release_version} (#{build_version}) [#{xarchive_file}] #{created_at}"
 
         extra_dsym = params[:extra_dsym] || []
         dsym_files = [app_dsym_filename].concat(extra_dsym).uniq
@@ -45,31 +48,43 @@ module Fastlane
         UI.success "Prepare #{dsym_files.size} dSYM file(s) compressing"
         Helper::DebugFileHelper.compress(dsym_files, output_file)
 
-        UI.success "Compressed proguard files: #{output_file}"
+        UI.success "Compressed dSYM file: #{output_file}"
         Helper::DebugFileHelper.store_shard_value SharedValues::DF_DSYM_ZIP_PATH, output_file
       end
 
       def self.last_created_dsym(scheme, archive_path)
         info_path = File.join(archive_path, '**', '*.xcarchive', 'Info.plist')
         matched_paths = []
+
+        UI.verbose "Finding #{scheme} xcarchive in #{archive_path} ..."
         Dir.glob(info_path) do |path|
           name = get_plist_value(path, 'Name')
           if scheme == name
+            xarchive = File.basename(File.dirname(path))
+            release_version, build_version, created_at = version_info(path)
+            UI.verbose " => #{release_version} (#{build_version}) [#{xarchive}] was created at #{created_at}"
+
             matched_paths << path
           end
         end
 
         return if matched_paths.empty?
 
-        UI.verbose "Found #{matched_paths.size} matched dSYM archive(s)"
+        UI.verbose "Found #{matched_paths.size} matched dSYM archive(s) of #{scheme}"
         last_created_path = matched_paths.size == 1 ? matched_paths.first : matched_paths.max_by { |p| File.stat(p).mtime }
         File.join(File.dirname(last_created_path), 'dSYMs')
       end
       private_class_method :last_created_dsym
 
-      def self.get_plist_value(file, key)
+      def self.get_plist_value(file, *keys)
         plist = read_plist(file)
-        plist[key.to_s]
+        UI.crash! 'Missing keys' if keys.empty?
+
+        if keys.size == 1
+          plist[keys[0]]
+        else
+          plist.dig(*keys)
+        end
       end
       private_class_method :get_plist_value
 
@@ -78,6 +93,15 @@ module Fastlane
         Plist.parse_xml(file)
       end
       private_class_method :read_plist
+
+      def self.version_info(path)
+        release_version = get_plist_value(path, 'ApplicationProperties', 'CFBundleShortVersionString')
+        build_version = get_plist_value(path, 'ApplicationProperties', 'CFBundleVersion')
+        created_at = get_plist_value(path, 'CreationDate')
+
+        [release_version, build_version, created_at]
+      end
+      private_class_method :version_info
 
       #####################################################
       # @!group Documentation
@@ -105,6 +129,16 @@ module Fastlane
                                        optional: true,
                                        default_value: [],
                                        type: Array),
+          FastlaneCore::ConfigItem.new(key: :release_version,
+                                       env_name: 'DF_DSYM_RELEASE_VERSION',
+                                       description: 'Use the given release version of app',
+                                       optional: true,
+                                       type: String),
+          FastlaneCore::ConfigItem.new(key: :build,
+                                       env_name: 'DF_DSYM_BUILD',
+                                       description: 'Use the given build version of app',
+                                       optional: true,
+                                       type: String),
           FastlaneCore::ConfigItem.new(key: :output_path,
                                        env_name: 'DF_DSYM_OUTPUT_PATH',
                                        description: "The output path of compressed dSYM file",
