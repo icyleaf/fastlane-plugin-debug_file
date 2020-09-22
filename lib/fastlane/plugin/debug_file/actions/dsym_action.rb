@@ -30,10 +30,11 @@ module Fastlane
           UI.user_error! "Not matched any archive with scheme: #{scheme}"
         end
 
-        xarchive_file = File.basename(File.dirname(archive_dsym_path))
-        xarchive_info_file = File.join(File.expand_path('../', archive_dsym_path), 'Info.plist')
-        release_version, build_version, created_at = version_info(xarchive_info_file)
-        UI.success "Selected dSYM archive: #{release_version} (#{build_version}) [#{xarchive_file}] #{created_at}"
+        xcarchive_file = File.basename(File.dirname(archive_dsym_path))
+        xcarchive_info_file = File.join(File.expand_path('../', archive_dsym_path), 'Info.plist')
+        xcarchive_info = Helper::DebugFileHelper.xcarchive_metadata(xcarchive_info_file)
+        release_version, build_version, created_at = version_info(xcarchive_info)
+        UI.success "Selected dSYM archive: #{release_version} (#{build_version}) [#{xcarchive_file}] #{created_at}"
 
         extra_dsym = params[:extra_dsym] || []
         dsym_files = [app_dsym_filename].concat(extra_dsym).uniq
@@ -58,11 +59,12 @@ module Fastlane
 
         UI.verbose "Finding #{scheme} xcarchive in #{archive_path} ..."
         Dir.glob(info_path) do |path|
-          name = get_plist_value(path, 'Name')
+          info = Helper::DebugFileHelper.xcarchive_metadata(path)
+          name = Helper::DebugFileHelper.fetch_key(info, 'Name')
           if scheme == name
-            xarchive = File.basename(File.dirname(path))
-            release_version, build_version, created_at = version_info(path)
-            UI.verbose " => #{release_version} (#{build_version}) [#{xarchive}] was created at #{created_at}"
+            xcarchive = File.basename(File.dirname(path))
+            release_version, build_version, created_at = version_info(info)
+            UI.verbose " => #{release_version} (#{build_version}) [#{xcarchive}] was created at #{created_at}"
 
             matched_paths << path
           end
@@ -76,30 +78,12 @@ module Fastlane
       end
       private_class_method :last_created_dsym
 
-      def self.get_plist_value(file, *keys)
-        plist = read_plist(file)
-        UI.crash! 'Missing keys' if keys.empty?
+      def self.version_info(info)
+        release_version = Helper::DebugFileHelper.fetch_key(info, 'ApplicationProperties', 'CFBundleShortVersionString')
+        build = Helper::DebugFileHelper.fetch_key(info, 'ApplicationProperties', 'CFBundleVersion')
+        created_at = Helper::DebugFileHelper.fetch_key(info, 'CreationDate')
 
-        if keys.size == 1
-          plist[keys[0]]
-        else
-          plist.dig(*keys)
-        end
-      end
-      private_class_method :get_plist_value
-
-      def self.read_plist(file)
-        require 'plist'
-        Plist.parse_xml(file)
-      end
-      private_class_method :read_plist
-
-      def self.version_info(path)
-        release_version = get_plist_value(path, 'ApplicationProperties', 'CFBundleShortVersionString')
-        build_version = get_plist_value(path, 'ApplicationProperties', 'CFBundleVersion')
-        created_at = get_plist_value(path, 'CreationDate')
-
-        [release_version, build_version, created_at]
+        [release_version, build, created_at]
       end
       private_class_method :version_info
 
