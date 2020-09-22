@@ -13,3 +13,11 @@ lane :ios_debug_file do
     overwrite: true
   )
 end
+
+lane :list_ios_dsym do
+  # list all dSYMs
+  list_dsym
+
+  # Filter by scheme name
+  list_dsym(scheme_name: 'AppName')
+end

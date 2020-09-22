@@ -35,9 +35,47 @@ module Fastlane
         end
       end
 
+      def self.macho_metadata(file)
+        require 'macho'
+
+        macho_type = MachO.open(file)
+        case macho_type
+        when ::MachO::MachOFile
+          [macho_type]
+        else
+          size = macho_type.fat_archs.each_with_object([]) do |arch, obj|
+            obj << arch.size
+          end
+
+          machos = []
+          macho_type.machos.each do |file|
+            machos << file
+          end
+          machos
+        end
+      end
+
       def self.store_shard_value(key, value)
         Actions.lane_context[key] = value
         ENV[key.to_s] = value
+      end
+
+      def self.xcarchive_metadata(path)
+        file = File.directory?(path) ? File.join(path, 'Info.plist') : path
+        UI.user_error! "Can not read Info.plist in #{file}" unless File.file?(file)
+
+        require 'plist'
+        Plist.parse_xml(file)
+      end
+
+      def self.fetch_key(plist, *keys)
+        UI.crash! 'Missing keys' if keys.empty?
+
+        if keys.size == 1
+          plist[keys[0]]
+        else
+          plist.dig(*keys)
+        end
       end
     end
   end
