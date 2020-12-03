@@ -19,5 +19,5 @@ lane :list_ios_dsym do
   list_dsym
 
   # Filter by scheme name
-  list_dsym(scheme_name: 'AppName')
+  list_dsym(scheme: 'AppName')
 end

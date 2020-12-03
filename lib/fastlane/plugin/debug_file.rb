@@ -1,4 +1,5 @@
 require 'fastlane/plugin/debug_file/version'
+require 'fastlane/plugin/debug_file/runner'
 
 module Fastlane
   module DebugFile

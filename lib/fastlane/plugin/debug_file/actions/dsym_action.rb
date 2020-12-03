@@ -10,7 +10,6 @@ module Fastlane
     end
 
     class DsymAction < Action
-      ARCHIVE_PATH = File.expand_path('~/Library/Developer/Xcode/Archives')
       OUTPUT_PATH = '.'
 
       def self.run(params)
@@ -101,7 +100,7 @@ module Fastlane
                                        env_name: 'DF_DSYM_ARCHIVE_PATH',
                                        description: 'The archive path of xcode',
                                        type: String,
-                                       default_value: Actions.lane_context[SharedValues::XCODEBUILD_ARCHIVE] || ARCHIVE_PATH,
+                                       default_value: Actions.lane_context[SharedValues::XCODEBUILD_ARCHIVE] || ::DebugFile::Runner::ARCHIVE_PATH,
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :scheme,
                                        env_name: 'DF_DSYM_SCHEME',

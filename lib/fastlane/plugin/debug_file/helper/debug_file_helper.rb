@@ -57,7 +57,12 @@ module Fastlane
 
       def self.store_shard_value(key, value)
         Actions.lane_context[key] = value
-        ENV[key.to_s] = value
+        ENV[key.to_s] = case value
+                        when String
+                          value
+                        else
+                          JSON.dump(value)
+                        end
       end
 
       def self.xcarchive_metadata(path)
