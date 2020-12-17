@@ -10,6 +10,7 @@ module Fastlane
     end
 
     class DsymAction < Action
+      ARCHIVE_PATH = ::DebugFile::Runner::ARCHIVE_PATH
       OUTPUT_PATH = '.'
 
       def self.run(params)
