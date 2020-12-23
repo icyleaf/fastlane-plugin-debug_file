@@ -8,8 +8,12 @@ lane :android_debug_file do
 end
 
 lane :ios_debug_file do
+  # Searching one from Actions.lane_context[SharedValues::XCODEBUILD_ARCHIVE] value via gym action.
+  dsym
+
+  # Searching latest date one file named 'AppName' to compress and overwrite output file
   dsym(
-    scheme: 'AppName',
+    scheme: 'AppName'
     overwrite: true
   )
 end

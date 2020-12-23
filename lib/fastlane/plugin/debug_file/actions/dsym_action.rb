@@ -14,29 +14,32 @@ module Fastlane
       OUTPUT_PATH = '.'
 
       def self.run(params)
-        archive_path = File.expand_path(params[:archive_path])
-        scheme = params[:scheme]
         overwrite = params[:overwrite]
 
-        app_dsym_filename = "#{scheme}.app.dsym"
+        archive_path = params[:archive_path]
+        scheme = params[:scheme]
+        runner = ::DebugFile::Runner.new({
+          archive_path: archive_path,
+          scheme: scheme
+        })
 
-        output_path = params[:output_path]
-        output_file = File.join(output_path, "#{app_dsym_filename}.zip")
-
-        Helper::DebugFileHelper.determine_output_file(output_file, overwrite)
-
-        archive_dsym_path = last_created_dsym(scheme, archive_path)
-        if archive_dsym_path && !Dir.exist?(archive_dsym_path)
-          UI.user_error! "Not matched any archive with scheme: #{scheme}"
+        dsym = runner.latest_dsym
+        unless dsym
+          UI.user_error! "Not matched any archive [#{archive_path}] with scheme [#{scheme}]"
         end
 
-        xcarchive_file = File.basename(File.dirname(archive_dsym_path))
-        xcarchive_info_file = File.join(File.expand_path('../', archive_dsym_path), 'Info.plist')
-        xcarchive_info = Helper::DebugFileHelper.xcarchive_metadata(xcarchive_info_file)
-        release_version, build_version, created_at = version_info(xcarchive_info)
-        UI.success "Selected dSYM archive: #{release_version} (#{build_version}) [#{xcarchive_file}] #{created_at}"
+        Fastlane::UI.success "Selected #{dsym[:name]} #{dsym[:release_version]} (#{dsym[:build]}) - #{dsym[:created_at]}"
+        dsym[:machos].each do |macho|
+          Fastlane::UI.message " • #{macho[:uuid]} (#{macho[:arch]})"
+        end
 
+        app_dsym_filename = File.basename(dsym[:dsym_path])
+        output_file = File.join(params[:output_path], "#{app_dsym_filename}.zip")
+        Helper::DebugFileHelper.determine_output_file(output_file, overwrite)
+
+        archive_dsym_path = File.dirname(dsym[:dsym_path])
         extra_dsym = params[:extra_dsym] || []
+
         dsym_files = [app_dsym_filename].concat(extra_dsym).uniq
         dsym_files.each_with_index do |filename, i|
           path = File.join(archive_dsym_path, filename)
@@ -46,46 +49,14 @@ module Fastlane
             dsym_files.delete_at(i)
           end
         end
-        UI.success "Prepare #{dsym_files.size} dSYM file(s) compressing"
+
+        UI.message "Prepare #{dsym_files.size} dSYM file(s) compressing"
+        UI.verbose dsym_files
         Helper::DebugFileHelper.compress(dsym_files, output_file)
 
         UI.success "Compressed dSYM file: #{output_file}"
         Helper::DebugFileHelper.store_shard_value SharedValues::DF_DSYM_ZIP_PATH, output_file
       end
-
-      def self.last_created_dsym(scheme, archive_path)
-        info_path = File.join(archive_path, '**', '*.xcarchive', 'Info.plist')
-        matched_paths = []
-
-        UI.verbose "Finding #{scheme} xcarchive in #{archive_path} ..."
-        Dir.glob(info_path) do |path|
-          info = Helper::DebugFileHelper.xcarchive_metadata(path)
-          name = Helper::DebugFileHelper.fetch_key(info, 'Name')
-          if scheme == name
-            xcarchive = File.basename(File.dirname(path))
-            release_version, build_version, created_at = version_info(info)
-            UI.verbose " => #{release_version} (#{build_version}) [#{xcarchive}] was created at #{created_at}"
-
-            matched_paths << path
-          end
-        end
-
-        return if matched_paths.empty?
-
-        UI.verbose "Found #{matched_paths.size} matched dSYM archive(s) of #{scheme}"
-        last_created_path = matched_paths.size == 1 ? matched_paths.first : matched_paths.max_by { |p| File.stat(p).mtime }
-        File.join(File.dirname(last_created_path), 'dSYMs')
-      end
-      private_class_method :last_created_dsym
-
-      def self.version_info(info)
-        release_version = Helper::DebugFileHelper.fetch_key(info, 'ApplicationProperties', 'CFBundleShortVersionString')
-        build = Helper::DebugFileHelper.fetch_key(info, 'ApplicationProperties', 'CFBundleVersion')
-        created_at = Helper::DebugFileHelper.fetch_key(info, 'CreationDate')
-
-        [release_version, build, created_at]
-      end
-      private_class_method :version_info
 
       #####################################################
       # @!group Documentation
@@ -100,12 +71,13 @@ module Fastlane
           FastlaneCore::ConfigItem.new(key: :archive_path,
                                        env_name: 'DF_DSYM_ARCHIVE_PATH',
                                        description: 'The archive path of xcode',
-                                       type: String,
                                        default_value: Actions.lane_context[SharedValues::XCODEBUILD_ARCHIVE] || ::DebugFile::Runner::ARCHIVE_PATH,
-                                       optional: true),
+                                       optional: true,
+                                       type: String),
           FastlaneCore::ConfigItem.new(key: :scheme,
                                        env_name: 'DF_DSYM_SCHEME',
                                        description: 'The scheme name of app',
+                                       optional: true,
                                        type: String),
           FastlaneCore::ConfigItem.new(key: :extra_dsym,
                                        env_name: 'DF_DSYM_EXTRA_DSYM',

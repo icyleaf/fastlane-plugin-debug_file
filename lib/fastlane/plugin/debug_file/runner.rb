@@ -19,52 +19,64 @@ module DebugFile
     end
 
     def list_dsym
-      archive_path = File.expand_path(options.fetch(:archive_path, ARCHIVE_PATH))
+      return [fetch_project_info(archive_path)] if project_archive_path? && !options[:scheme]
+
       search_dsym(archive_path, options[:scheme])
     end
 
     private
 
     def search_dsym(path, scheme = nil)
-      info_path = File.join(path, '**', '*.xcarchive', 'Info.plist')
-      matched_paths = []
-
+      project_path = File.join(path, '**', '*.xcarchive')
       obj = []
-      Dir.glob(info_path) do |path|
-        info = Fastlane::Helper::DebugFileHelper.xcarchive_metadata(path)
-        name = Fastlane::Helper::DebugFileHelper.fetch_key(info, 'Name')
-        next unless scheme.to_s.empty? || scheme == name
-
-        release_version = Fastlane::Helper::DebugFileHelper.fetch_key(info, 'ApplicationProperties', 'CFBundleShortVersionString')
-        build = Fastlane::Helper::DebugFileHelper.fetch_key(info, 'ApplicationProperties', 'CFBundleVersion')
-        dsym_path = Dir.glob(File.join(File.dirname(path), 'dSYMs', "#{name}.app.dSYM", '**', '*', name)).first
-        created_at = Fastlane::Helper::DebugFileHelper.fetch_key(info, 'CreationDate')
-
-        machos = []
-        Fastlane::Helper::DebugFileHelper.macho_metadata(dsym_path).each do |macho|
-          machos << {
-            arch: macho.cpusubtype,
-            uuid: macho[:LC_UUID][0].uuid_string
-          }
-        end
-
-        item = {
-          root_path: File.basename(File.dirname(path)),
-          dsym_path: dsym_path,
-          machos: machos,
-          info: info,
-          name: name,
-          release_version: release_version,
-          build: build,
-          created_at: created_at,
-        }
+      Dir.glob(project_path) do |path|
+        next unless item = fetch_project_info(path, scheme)
 
         yield item if block_given?
-
         obj << item
       end
 
       obj
+    end
+
+    def fetch_project_info(path, scheme = nil)
+      info = Fastlane::Helper::DebugFileHelper.xcarchive_metadata(File.join(path, 'Info.plist'))
+      name = Fastlane::Helper::DebugFileHelper.fetch_key(info, 'Name')
+      return unless scheme.to_s.empty? || scheme == name
+
+      release_version = Fastlane::Helper::DebugFileHelper.fetch_key(info, 'ApplicationProperties', 'CFBundleShortVersionString')
+      build = Fastlane::Helper::DebugFileHelper.fetch_key(info, 'ApplicationProperties', 'CFBundleVersion')
+      dsym_path = File.join(path, 'dSYMs', "#{name}.app.dSYM")
+      dsym_binray_path = Dir.glob(File.join(dsym_path, '**', '*', name)).first
+      created_at = Fastlane::Helper::DebugFileHelper.fetch_key(info, 'CreationDate')
+
+      machos = []
+      Fastlane::Helper::DebugFileHelper.macho_metadata(dsym_binray_path).each do |macho|
+        machos << {
+          arch: macho.cpusubtype,
+          uuid: macho[:LC_UUID][0].uuid_string
+        }
+      end
+
+      {
+        root_path: File.basename(File.dirname(path)),
+        dsym_path: dsym_path,
+        machos: machos,
+        info: info,
+        name: name,
+        release_version: release_version,
+        build: build,
+        created_at: created_at,
+      }
+    end
+
+    def project_archive_path?
+      File.file?(File.join(archive_path, 'Info.plist')) &&
+        Dir.exist?(File.join(archive_path, 'dSYMs'))
+    end
+
+    def archive_path
+      @archive_path ||= File.expand_path(options.fetch(:archive_path, ARCHIVE_PATH))
     end
   end
 end
